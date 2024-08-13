@@ -4,6 +4,7 @@ import numpy as np
 import argparse
 import sys
 from ultralytics import YOLO
+from tracker import Tracker
 
 # construct the argument parser and parse the arguments
 arg_parser = argparse.ArgumentParser()
@@ -17,9 +18,9 @@ else:
 
 yolo_model = YOLO("yolov8s.pt")
 
-inner_area_coordinates = [(312, 388), (289, 390), (474, 469), (497, 462)]
+outer_area_coordinates = [(312, 388), (289, 390), (474, 469), (497, 462)]
 
-outer_area_coordinates = [(279, 392), (250, 397), (423, 477), (454, 469)]
+inner_area_coordinates = [(279, 392), (250, 397), (423, 477), (454, 469)]
 
 
 def RGB(event, x, y, flags, param):
@@ -34,112 +35,89 @@ cv2.setMouseCallback("RGB", RGB)
 coco_file = open("coco.txt", "r")
 coco_data = coco_file.read()
 class_list = coco_data.split("\n")
-# print(class_list)
 
 frame_count = 0
+person_tracker = Tracker()
+persons_entering = {}
+entering = set()
 
-last_known_positions = {}
-
+persons_exiting = {}
+leaving = set()
 while True:
-    read_successful, current_frame = video_capture.read()
-    if not read_successful:
+    read, current_frame = video_capture.read()
+    if not read:
         break
     frame_count += 1
     if frame_count % 2 != 0:
         continue
     current_frame = cv2.resize(current_frame, (1020, 500))
-    #    current_frame=cv2.flip(current_frame,1)
     yolo_results = yolo_model.predict(current_frame)
-    #   print(results)
     bounding_boxes = yolo_results[0].boxes.data
     bounding_boxes_df = pd.DataFrame(bounding_boxes).astype("float")
-    #    print(px)
-    list = []
+
+    coordinates_list = []
 
     for index, row in bounding_boxes_df.iterrows():
-        #        print(row)
-        x1 = int(row[0])
-        y1 = int(row[1])
-        x2 = int(row[2])
-        y2 = int(row[3])
         class_index = int(row[5])
         class_name = class_list[class_index]
-        object_downward_extreme = (x2, y2)
 
-        if not "person" in class_name:
-            continue
+        if "person" in class_name:
+            coordinates_list.append(
+                [int(row[0]), int(row[1]), int(row[2]), int(row[3])]
+            )
 
-        # Actually, is a number, so when is less than 0, the object is outside the area, otherwise is inside
-        object_in_inner_area = cv2.pointPolygonTest(
-            np.array(inner_area_coordinates, np.int32), object_downward_extreme, False
+    boxes_ids = person_tracker.update(coordinates_list)
+    for box_id in boxes_ids:
+        x1, y1, x2, y2, person_id = box_id
+        person_downward_left = (x2, y2)
+        person_in_inner_area = cv2.pointPolygonTest(
+            np.array(inner_area_coordinates), (x2, y2), False
         )
+        # Actually is a number so we need to check if it is greater than 0
+        if person_in_inner_area >= 0:
+            persons_entering[person_id] = person_downward_left
+            cv2.rectangle(current_frame, (x1, y1), (x2, y2), (0, 0, 255), 2)
 
-        object_in_outer_area = cv2.pointPolygonTest(
-            np.array(outer_area_coordinates, np.int32),
-            object_downward_extreme,
-            False,
+        if person_id in persons_entering:
+            person_in_outer_area = cv2.pointPolygonTest(
+                np.array(outer_area_coordinates), (x2, y2), False
+            )
+            if person_in_outer_area >= 0:
+                cv2.rectangle(current_frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                entering.add(person_id)
+
+        person_in_outer_area = cv2.pointPolygonTest(
+            np.array(outer_area_coordinates), (x2, y2), False
         )
+        if person_in_outer_area >= 0:
+            persons_exiting[person_id] = person_downward_left
+            cv2.rectangle(current_frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
 
-        # Determine if the person is entering or leaving the room
-        if index in last_known_positions:
-            if last_known_positions[index] == 2 and object_in_inner_area >= 0:
-                print("Person is entering the room", file=sys.stderr)
-            elif last_known_positions[index] == 1 and object_in_outer_area >= 0:
-                print("Person is leaving the room", file=sys.stderr)
+        if person_id in persons_exiting:
+            person_in_inner_area = cv2.pointPolygonTest(
+                np.array(inner_area_coordinates), (x2, y2), False
+            )
+            if person_in_inner_area >= 0:
+                cv2.rectangle(current_frame, (x1, y1), (x2, y2), (0, 0, 255), 2)
+                leaving.add(person_id)
 
-        # Updates the last known position of the person
-        # 1 means that the person is in the inner area
-        # 2 means that the person is in the outer area
-        if object_in_inner_area >= 0:
-            last_known_positions[index] = 1
-        elif object_in_outer_area >= 0:
-            last_known_positions[index] = 2
-
-        cv2.rectangle(current_frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
-        cv2.circle(current_frame, (x2, y2), 5, (255, 0, 255), -1)
-        cv2.putText(
-            current_frame,
-            str(class_name),
-            (x1, y1),
-            cv2.FONT_HERSHEY_COMPLEX,
-            (0.5),
-            (255, 255, 255),
-            1,
-        )
-
-    # Draw area 1
-    cv2.polylines(
-        current_frame,
-        [np.array(inner_area_coordinates, np.int32)],
-        True,
-        (255, 0, 0),
-        2,
-    )
+    # Display the amount of people entering and leaving
     cv2.putText(
         current_frame,
-        str("1"),
-        (504, 471),
+        "Entered: " + str(len(entering)),
+        (60, 80),
         cv2.FONT_HERSHEY_COMPLEX,
         (0.5),
-        (0, 0, 0),
+        (0, 0, 255),
         1,
     )
-
-    # Draw area 2
-    cv2.polylines(
-        current_frame,
-        [np.array(outer_area_coordinates, np.int32)],
-        True,
-        (255, 0, 0),
-        2,
-    )
     cv2.putText(
         current_frame,
-        str("2"),
-        (466, 485),
+        "Leaved: " + str(len(leaving)),
+        (60, 100),
         cv2.FONT_HERSHEY_COMPLEX,
         (0.5),
-        (0, 0, 0),
+        (0, 255, 0),
         1,
     )
 
