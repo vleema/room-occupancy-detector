@@ -102,24 +102,34 @@ while True:
                 leaving.add(person_id)
 
     # Display the amount of people entering and leaving
+    # cv2.putText(
+    #     current_frame,
+    #     "Entered: " + str(len(entering)),
+    #     (60, 80),
+    #     cv2.FONT_HERSHEY_COMPLEX,
+    #     (0.5),
+    #     (0, 0, 255),
+    #     1,
+    # )
+    # cv2.putText(
+    #     current_frame,
+    #     "Leaved: " + str(len(leaving)),
+    #     (60, 100),
+    #     cv2.FONT_HERSHEY_COMPLEX,
+    #     (0.5),
+    #     (0, 255, 0),
+    #     1,
+    # )
+
     cv2.putText(
         current_frame,
-        "Entered: " + str(len(entering)),
-        (60, 80),
+        "Total de pessoas na sala: " + str(len(entering) - len(leaving)),
+        (60, 60),
         cv2.FONT_HERSHEY_COMPLEX,
         (0.5),
-        (0, 0, 255),
-        1,
-    )
-    cv2.putText(
-        current_frame,
-        "Leaved: " + str(len(leaving)),
-        (60, 100),
-        cv2.FONT_HERSHEY_COMPLEX,
-        (0.5),
-        (0, 255, 0),
-        1,
-    )
+        (255,255, 0),
+        1
+        )
 
     cv2.imshow("RGB", current_frame)
     if cv2.waitKey(1) & 0xFF == 27:
