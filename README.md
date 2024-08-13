@@ -1,5 +1,12 @@
 # Room Occupancy Detector
 
+## Dependencies
+
+- Python 3.6+
+- OpenCV
+- Pandas
+- Ultralytics
+
 ## Usage
 
 ```terminal
