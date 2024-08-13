@@ -18,9 +18,9 @@ else:
 
 yolo_model = YOLO("yolov8s.pt")
 
-outer_area_coordinates = [(312, 388), (289, 390), (474, 469), (497, 462)]
+inner_area_coordinates = [(612, 426), (594, 418), (720, 380), (753, 384)]
 
-inner_area_coordinates = [(279, 392), (250, 397), (423, 477), (454, 469)]
+outer_area_coordinates = [(629, 437), (645, 445), (774, 397), (760, 390)]
 
 
 def RGB(event, x, y, flags, param):
@@ -120,6 +120,16 @@ while True:
     #     (0, 255, 0),
     #     1,
     # )
+    #
+
+    # Draw the inner area
+    cv2.polylines(
+        current_frame, [np.array(inner_area_coordinates)], True, (0, 0, 255), 2
+    )
+    # Draw the outer area
+    cv2.polylines(
+        current_frame, [np.array(outer_area_coordinates)], True, (0, 255, 0), 2
+    )
 
     cv2.putText(
         current_frame,
@@ -127,9 +137,9 @@ while True:
         (60, 60),
         cv2.FONT_HERSHEY_COMPLEX,
         (0.5),
-        (255,255, 0),
-        1
-        )
+        (255, 255, 0),
+        1,
+    )
 
     cv2.imshow("RGB", current_frame)
     if cv2.waitKey(1) & 0xFF == 27:
