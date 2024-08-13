@@ -2,6 +2,7 @@ import cv2
 import pandas as pd
 import numpy as np
 import argparse
+import sys
 from ultralytics import YOLO
 
 # construct the argument parser and parse the arguments
@@ -16,15 +17,15 @@ else:
 
 yolo_model = YOLO("yolov8s.pt")
 
-area1_coordinates = [(312, 388), (289, 390), (474, 469), (497, 462)]
+inner_area_coordinates = [(312, 388), (289, 390), (474, 469), (497, 462)]
 
-area2_coordinates = [(279, 392), (250, 397), (423, 477), (454, 469)]
+outer_area_coordinates = [(279, 392), (250, 397), (423, 477), (454, 469)]
 
 
 def RGB(event, x, y, flags, param):
     if event == cv2.EVENT_MOUSEMOVE:
         colorsBGR = [x, y]
-        print(colorsBGR)
+        print(colorsBGR, file=sys.stderr)
 
 
 cv2.namedWindow("RGB")
@@ -37,6 +38,7 @@ class_list = coco_data.split("\n")
 
 frame_count = 0
 
+last_known_positions = {}
 
 while True:
     read_successful, current_frame = video_capture.read()
@@ -62,45 +64,84 @@ while True:
         y2 = int(row[3])
         class_index = int(row[5])
         class_name = class_list[class_index]
-        if "person" in class_name:
-            cv2.rectangle(current_frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
-            cv2.putText(
-                current_frame,
-                str(class_name),
-                (x1, y1),
-                cv2.FONT_HERSHEY_COMPLEX,
-                (0.5),
-                (255, 255, 255),
-                1,
-            )
+        object_downward_extreme = (x2, y2)
 
-    # # Draw area 1
-    # cv2.polylines(
-    #     current_frame, [np.array(area1_coordinates, np.int32)], True, (255, 0, 0), 2
-    # )
-    # cv2.putText(
-    #     current_frame,
-    #     str("1"),
-    #     (504, 471),
-    #     cv2.FONT_HERSHEY_COMPLEX,
-    #     (0.5),
-    #     (0, 0, 0),
-    #     1,
-    # )
-    #
-    # # Draw area 2
-    # cv2.polylines(
-    #     current_frame, [np.array(area2_coordinates, np.int32)], True, (255, 0, 0), 2
-    # )
-    # cv2.putText(
-    #     current_frame,
-    #     str("2"),
-    #     (466, 485),
-    #     cv2.FONT_HERSHEY_COMPLEX,
-    #     (0.5),
-    #     (0, 0, 0),
-    #     1,
-    # )
+        if not "person" in class_name:
+            continue
+
+        # Actually, is a number, so when is less than 0, the object is outside the area, otherwise is inside
+        object_in_inner_area = cv2.pointPolygonTest(
+            np.array(inner_area_coordinates, np.int32), object_downward_extreme, False
+        )
+
+        object_in_outer_area = cv2.pointPolygonTest(
+            np.array(outer_area_coordinates, np.int32),
+            object_downward_extreme,
+            False,
+        )
+
+        # Determine if the person is entering or leaving the room
+        if index in last_known_positions:
+            if last_known_positions[index] == 2 and object_in_inner_area >= 0:
+                print("Person is entering the room", file=sys.stderr)
+            elif last_known_positions[index] == 1 and object_in_outer_area >= 0:
+                print("Person is leaving the room", file=sys.stderr)
+
+        # Updates the last known position of the person
+        # 1 means that the person is in the inner area
+        # 2 means that the person is in the outer area
+        if object_in_inner_area >= 0:
+            last_known_positions[index] = 1
+        elif object_in_outer_area >= 0:
+            last_known_positions[index] = 2
+
+        cv2.rectangle(current_frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+        cv2.circle(current_frame, (x2, y2), 5, (255, 0, 255), -1)
+        cv2.putText(
+            current_frame,
+            str(class_name),
+            (x1, y1),
+            cv2.FONT_HERSHEY_COMPLEX,
+            (0.5),
+            (255, 255, 255),
+            1,
+        )
+
+    # Draw area 1
+    cv2.polylines(
+        current_frame,
+        [np.array(inner_area_coordinates, np.int32)],
+        True,
+        (255, 0, 0),
+        2,
+    )
+    cv2.putText(
+        current_frame,
+        str("1"),
+        (504, 471),
+        cv2.FONT_HERSHEY_COMPLEX,
+        (0.5),
+        (0, 0, 0),
+        1,
+    )
+
+    # Draw area 2
+    cv2.polylines(
+        current_frame,
+        [np.array(outer_area_coordinates, np.int32)],
+        True,
+        (255, 0, 0),
+        2,
+    )
+    cv2.putText(
+        current_frame,
+        str("2"),
+        (466, 485),
+        cv2.FONT_HERSHEY_COMPLEX,
+        (0.5),
+        (0, 0, 0),
+        1,
+    )
 
     cv2.imshow("RGB", current_frame)
     if cv2.waitKey(1) & 0xFF == 27:
