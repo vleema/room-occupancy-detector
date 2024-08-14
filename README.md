@@ -6,6 +6,8 @@
 - OpenCV
 - Pandas
 - Ultralytics
+- Paho-MQTT
+- Dotenv
 
 ## Usage
 
