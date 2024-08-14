@@ -33,5 +33,5 @@ def broker():
     while True:
         with lock:
             if shared_data["total"] is not None:
-                client.publish("Ordep_1/feed/room-people-entradas", shared_data["total"])
+                client.publish("Ordep_1/feeds/room-people-detector.entrada", shared_data["total"])
         sleep(15)
